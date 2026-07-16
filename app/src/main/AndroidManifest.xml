@@ -1,9 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
+
+
+    <!-- 麦克风权限 -->
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
 
+    <!-- 前台服务权限 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+
+    <!-- Android 14+ 麦克风前台服务权限 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/>
+
+
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -13,18 +22,32 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.SleepTracker">
+
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:label="@string/app_name"
             android:theme="@style/Theme.SleepTracker"
             android:windowSoftInputMode="adjustResize">
+
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
                 <category android:name="android.intent.category.LAUNCHER" />
+
             </intent-filter>
+
         </activity>
+
+
+        <!-- 睡眠录音前台服务 -->
+        <service
+            android:name=".data.audio.SleepRecordService"
+            android:foregroundServiceType="microphone"
+            android:exported="false"/>
+
+
     </application>
 
 </manifest>
