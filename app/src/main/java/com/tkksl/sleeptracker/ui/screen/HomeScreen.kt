@@ -27,7 +27,8 @@ import com.tkksl.sleeptracker.utils.formatTimeStamp
 
 @Composable
 fun HomeScreen(
-    navController: NavHostController
+    navController: NavHostController,
+    viewModel: SleepViewModel
 ) {
     val context = LocalContext.current
     val sleepViewModel: SleepViewModel = viewModel(factory = SleepViewModelFactory(context))

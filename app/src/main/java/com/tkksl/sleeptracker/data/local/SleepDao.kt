@@ -3,27 +3,63 @@ package com.tkksl.sleeptracker.data.local
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
+import androidx.room.Transaction
+import com.tkksl.sleeptracker.data.model.AudioEventEntity
 import com.tkksl.sleeptracker.data.model.SleepRecord
+import com.tkksl.sleeptracker.data.model.SleepRecordWithEvents
+import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface SleepDao {
+    /**
+     * 插入单条睡眠主记录，返回自增主键id（用于后续绑定子事件）
+     */
     @Insert
-    suspend fun insert(record: SleepRecord)
+    suspend fun insertSleepRecord(record: SleepRecord): Long
 
-    @Query("SELECT * FROM sleep_record ORDER BY startTime DESC")
-    suspend fun getAllRecords(): List<SleepRecord>
+    /**
+     * 批量插入多条声响子事件
+     */
+    @Insert
+    suspend fun insertAudioEvents(events: List<AudioEventEntity>)
 
-    @Query("SELECT * FROM sleep_record ORDER BY startTime DESC LIMIT 1")
-    suspend fun getLatestRecord(): SleepRecord?
+    /**
+     * 根据记录ID，一次性查询【睡眠记录+全部关联声响】（详情页专用）
+     * Transaction保证主表子表查询原子性
+     */
+    @Transaction
+    @Query("SELECT * FROM sleep_records WHERE id = :recordId")
+    suspend fun getRecordWithAllEvents(recordId: Long): SleepRecordWithEvents?
 
-    // 根据id查询单条记录（详情页使用）
-    @Query("SELECT * FROM sleep_record WHERE id = :id")
-    suspend fun getSleepRecordById(id: Long): SleepRecord?
+    /**
+     * 历史列表仅加载基础睡眠元数据，不携带事件，提升列表滑动性能
+     * 倒序：最新记录在最上方
+     */
+    @Query("SELECT * FROM sleep_records ORDER BY startTime DESC")
+    fun getAllSleepRecordsFlow(): Flow<List<SleepRecord>>
 
-    @Query("DELETE FROM sleep_record")
-    suspend fun deleteAll()
+    /**
+     * 根据ID仅查询单条睡眠主记录（不带事件）
+     */
+    @Query("SELECT * FROM sleep_records WHERE id = :recordId")
+    suspend fun getSingleSleepRecord(recordId: Long): SleepRecord?
 
-    // 批量删除传入id集合的记录
-    @Query("DELETE FROM sleep_record WHERE id IN (:idList)")
-    suspend fun deleteByIdList(idList: List<Long>)
+    /**
+     * 获取最新一条睡眠记录（首页展示）
+     */
+    @Query("SELECT * FROM sleep_records ORDER BY startTime DESC LIMIT 1")
+    suspend fun getLatestSleepRecord(): SleepRecord?
+
+    /**
+     * 批量删除多条睡眠记录
+     * 外键配置CASCADE，会自动同步删除对应audio_events子表数据，无需手动操作事件
+     */
+    @Query("DELETE FROM sleep_records WHERE id IN (:idList)")
+    suspend fun batchDeleteRecords(idList: List<Long>)
+
+    /**
+     * 清空全部睡眠记录，自动级联清空所有声响事件
+     */
+    @Query("DELETE FROM sleep_records")
+    suspend fun deleteAllSleepRecords()
 }

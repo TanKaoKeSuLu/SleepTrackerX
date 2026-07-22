@@ -1,10 +1,14 @@
 package com.tkksl.sleeptracker.data.audio
 
+import com.tkksl.sleeptracker.data.settings.RecordingConfig
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 
-class WavConverter {
+class WavConverter(
+    private val config: RecordingConfig
+) {
+    // 固定2个参数：仅pcm、wav文件
     fun convert(
         pcmFile: File,
         wavFile: File
@@ -25,74 +29,72 @@ class WavConverter {
     private fun writeWavHeader(
         output: FileOutputStream,
         pcmSize: Long
-    ) {
-        val sampleRate = 44100
-        val channels = 1
-        val bitsPerSample = 16
+    ){
+        // 直接读取构造传入的成员config
+        val sampleRate = config.sampleRate
+        val channels = config.channelCount
+        val bitsPerSample = config.bitDepth
+
         val byteRate = sampleRate * channels * bitsPerSample / 8
+        val blockAlign = channels * bitsPerSample / 8
         val totalDataLen = pcmSize + 36
         val header = ByteArray(44)
 
         // RIFF
-        header[0] = 'R'.code.toByte()
-        header[1] = 'I'.code.toByte()
-        header[2] = 'F'.code.toByte()
-        header[3] = 'F'.code.toByte()
+        header[0]='R'.code.toByte()
+        header[1]='I'.code.toByte()
+        header[2]='F'.code.toByte()
+        header[3]='F'.code.toByte()
         writeInt(header, 4, totalDataLen.toInt())
 
         // WAVE
-        header[8] = 'W'.code.toByte()
-        header[9] = 'A'.code.toByte()
-        header[10] = 'V'.code.toByte()
-        header[11] = 'E'.code.toByte()
+        header[8]='W'.code.toByte()
+        header[9]='A'.code.toByte()
+        header[10]='V'.code.toByte()
+        header[11]='E'.code.toByte()
 
         // fmt
-        header[12] = 'f'.code.toByte()
-        header[13] = 'm'.code.toByte()
-        header[14] = 't'.code.toByte()
-        header[15] = ' '.code.toByte()
+        header[12]='f'.code.toByte()
+        header[13]='m'.code.toByte()
+        header[14]='t'.code.toByte()
+        header[15]=' '.code.toByte()
         writeInt(header, 16, 16)
 
-        // PCM format
+        // PCM格式
         writeShort(header, 20, 1)
-        // channels
         writeShort(header, 22, channels)
-        // sample rate
         writeInt(header, 24, sampleRate)
-        // byte rate
         writeInt(header, 28, byteRate)
-        // block align
-        writeShort(header, 32, channels * bitsPerSample / 8)
-        // bits
+        writeShort(header, 32, blockAlign)
         writeShort(header, 34, bitsPerSample)
 
         // data
-        header[36] = 'd'.code.toByte()
-        header[37] = 'a'.code.toByte()
-        header[38] = 't'.code.toByte()
-        header[39] = 'a'.code.toByte()
+        header[36]='d'.code.toByte()
+        header[37]='a'.code.toByte()
+        header[38]='t'.code.toByte()
+        header[39]='a'.code.toByte()
         writeInt(header, 40, pcmSize.toInt())
 
         output.write(header)
     }
 
     private fun writeInt(
-        buffer: ByteArray,
-        offset: Int,
-        value: Int
-    ) {
-        buffer[offset] = (value and 0xff).toByte()
-        buffer[offset + 1] = (value shr 8 and 0xff).toByte()
-        buffer[offset + 2] = (value shr 16 and 0xff).toByte()
-        buffer[offset + 3] = (value shr 24 and 0xff).toByte()
+        buffer:ByteArray,
+        offset:Int,
+        value:Int
+    ){
+        buffer[offset]=(value and 0xff).toByte()
+        buffer[offset+1]=(value shr 8 and 0xff).toByte()
+        buffer[offset+2]=(value shr 16 and 0xff).toByte()
+        buffer[offset+3]=(value shr 24 and 0xff).toByte()
     }
 
     private fun writeShort(
-        buffer: ByteArray,
-        offset: Int,
-        value: Int
-    ) {
-        buffer[offset] = (value and 0xff).toByte()
-        buffer[offset + 1] = (value shr 8 and 0xff).toByte()
+        buffer:ByteArray,
+        offset:Int,
+        value:Int
+    ){
+        buffer[offset]=(value and 0xff).toByte()
+        buffer[offset+1]=(value shr 8 and 0xff).toByte()
     }
 }

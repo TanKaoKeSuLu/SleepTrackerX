@@ -1,7 +1,9 @@
 package com.tkksl.sleeptracker.navigation
 
-import androidx.compose.ui.Modifier
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -11,25 +13,37 @@ import com.tkksl.sleeptracker.ui.screen.HomeScreen
 import com.tkksl.sleeptracker.ui.screen.HistoryScreen
 import com.tkksl.sleeptracker.ui.screen.SettingsScreen
 import com.tkksl.sleeptracker.ui.screen.SleepDetailScreen
+import com.tkksl.sleeptracker.viewmodel.SleepViewModel
+import com.tkksl.sleeptracker.viewmodel.SleepViewModelFactory
 
 @Composable
 fun AppNavHost(
     navController: NavHostController,
     modifier: Modifier = Modifier
 ) {
+    // 全局唯一共享ViewModel
+    val appContext = LocalContext.current.applicationContext
+    val sharedSleepVm: SleepViewModel = viewModel(factory = SleepViewModelFactory(appContext))
+
     NavHost(
         modifier = modifier,
         navController = navController,
         startDestination = Screen.Home.route
     ) {
         composable(Screen.Home.route) {
-            HomeScreen(navController)
+            HomeScreen(
+                navController = navController,
+                viewModel = sharedSleepVm
+            )
         }
         composable(Screen.History.route) {
-            HistoryScreen(navController)
+            HistoryScreen(
+                navController = navController,
+                viewModel = sharedSleepVm
+            )
         }
         composable(Screen.Settings.route) {
-            SettingsScreen(navController)
+            SettingsScreen(sleepVm = sharedSleepVm)
         }
         composable(
             route = Screen.Detail.route,
@@ -41,8 +55,9 @@ fun AppNavHost(
         ) { backStackEntry ->
             val recordId = backStackEntry.arguments?.getLong("recordId") ?: 0L
             SleepDetailScreen(
-                navController = navController,
-                targetRecordId = recordId
+                recordId = recordId,
+                viewModel = sharedSleepVm,
+                onBack = { navController.popBackStack() }
             )
         }
     }

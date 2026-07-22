@@ -1,5 +1,8 @@
 package com.tkksl.sleeptracker.utils
 
+import java.text.SimpleDateFormat
+import java.util.Locale
+
 // 秒数 → 时分秒 格式 00:00:00
 fun formattedTime(totalSeconds: Long): String {
     val hours = totalSeconds / 3600
@@ -15,9 +18,9 @@ fun formatDuration(seconds: Long): String {
     return "${hour}小时${minute}分钟"
 }
 
-// 时间戳 → 年月日时分字符串
+// 时间戳 → 年月日时分字符串【已改为中文格式】
 fun formatTimeStamp(ms: Long): String {
-    val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
+    val sdf = SimpleDateFormat("yyyy年MM月dd日 HH:mm", Locale.getDefault())
     return sdf.format(ms)
 }
 

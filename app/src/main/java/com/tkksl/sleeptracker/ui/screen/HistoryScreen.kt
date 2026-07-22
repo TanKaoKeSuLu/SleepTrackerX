@@ -23,55 +23,50 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.tkksl.sleeptracker.navigation.Screen
 import com.tkksl.sleeptracker.ui.component.HistoryItemCard
 import com.tkksl.sleeptracker.ui.component.SleepQualityColor
-import com.tkksl.sleeptracker.viewmodel.SleepViewModel
-import com.tkksl.sleeptracker.viewmodel.SleepViewModelFactory
 import com.tkksl.sleeptracker.utils.formatTimeStamp
+import com.tkksl.sleeptracker.viewmodel.SleepViewModel
 
 @Composable
 fun HistoryScreen(
     navController: NavController,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    viewModel: SleepViewModel // 直接接收全局共享Vm，不内部新建
 ) {
-    val context = LocalContext.current
-    val vm: SleepViewModel = viewModel(factory = SleepViewModelFactory(context))
-    val recordList = vm.allRecordList
+    // 删除页面内部新建viewModel代码
+    val recordList = viewModel.allRecordList
 
-    // 删除弹窗控制
     var showDeleteDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         modifier = modifier.fillMaxWidth(),
         bottomBar = {
-            // 多选模式底部操作栏
-            if (vm.isMultiSelectMode) {
+            if (viewModel.isMultiSelectMode) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(20.dp)
                 ) {
                     Text(
-                        text = "已选中 ${vm.selectedIdSet.size} 条记录",
+                        text = "已选中 ${viewModel.selectedIdSet.size} 条记录",
                         style = MaterialTheme.typography.titleMedium
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Button(
-                            onClick = { vm.selectAllOrCancel() },
+                            onClick = { viewModel.selectAllOrCancel() },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text(if(vm.selectedIdSet.size == recordList.size) "取消全选" else "全选")
+                            Text(if(viewModel.selectedIdSet.size == recordList.size) "取消全选" else "全选")
                         }
                         Button(
                             onClick = { showDeleteDialog = true },
                             modifier = Modifier.fillMaxWidth(),
-                            enabled = vm.selectedIdSet.isNotEmpty()
+                            enabled = viewModel.selectedIdSet.isNotEmpty()
                         ) {
                             Text("删除选中记录")
                         }
@@ -86,7 +81,6 @@ fun HistoryScreen(
                 .padding(innerPadding)
                 .padding(horizontal = 20.dp, vertical = 20.dp)
         ) {
-            // 顶部标题 + 选择/完成按钮
             androidx.compose.foundation.layout.Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -96,15 +90,14 @@ fun HistoryScreen(
                     text = "睡眠历史",
                     style = MaterialTheme.typography.headlineMedium
                 )
-                TextButton(onClick = { vm.switchSelectMode() }) {
-                    Text(if (vm.isMultiSelectMode) "完成" else "选择")
+                TextButton(onClick = { viewModel.switchSelectMode() }) {
+                    Text(if (viewModel.isMultiSelectMode) "完成" else "选择")
                 }
             }
 
             Spacer(modifier = Modifier.height(24.dp))
 
             if (recordList.isEmpty()) {
-                // 无记录空白提示
                 Column(
                     modifier = Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.Center,
@@ -113,14 +106,12 @@ fun HistoryScreen(
                     Text(text = "暂无睡眠记录，前往首页记录睡眠")
                 }
             } else {
-                // 循环渲染全部睡眠记录
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                     contentPadding = PaddingValues(bottom = 20.dp)
                 ) {
                     items(recordList, key = { it.id }) { record ->
-                        // 只格式化一次起止时间字符串
                         val fullStart = formatTimeStamp(record.startTime)
                         val fullEnd = formatTimeStamp(record.endTime)
                         val dateStr = fullStart.substringBefore(" ")
@@ -143,12 +134,12 @@ fun HistoryScreen(
                             bedTime = bedStr,
                             wakeTime = wakeStr,
                             qualityColor = color,
-                            isMultiSelect = vm.isMultiSelectMode,
-                            isChecked = vm.selectedIdSet.contains(record.id),
+                            isMultiSelect = viewModel.isMultiSelectMode,
+                            isChecked = viewModel.selectedIdSet.contains(record.id),
                             onCardClick = {
                                 navController.navigate(Screen.Detail.createRoute(record.id))
                             },
-                            onCheckClick = { vm.toggleRecordSelect(record.id) }
+                            onCheckClick = { viewModel.toggleRecordSelect(record.id) }
                         )
                     }
                 }
@@ -156,7 +147,6 @@ fun HistoryScreen(
         }
     }
 
-    // 删除确认弹窗
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
@@ -164,7 +154,7 @@ fun HistoryScreen(
             text = { Text("确定要删除选中的睡眠记录吗？删除后无法恢复！") },
             confirmButton = {
                 TextButton(onClick = {
-                    vm.deleteSelectedRecords()
+                    viewModel.deleteSelectedRecords()
                     showDeleteDialog = false
                 }) {
                     Text("确认删除")

@@ -1,6 +1,10 @@
 package com.tkksl.sleeptracker
 
 import android.Manifest
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -16,6 +20,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.rememberNavController
 import com.tkksl.sleeptracker.navigation.AppRoot
 import com.tkksl.sleeptracker.ui.theme.SleepTrackerTheme
+import com.tkksl.sleeptracker.viewmodel.SleepViewModel
 import com.tkksl.sleeptracker.viewmodel.SleepViewModelFactory
 import com.tkksl.sleeptracker.viewmodel.ThemeManager
 import androidx.compose.runtime.LaunchedEffect
@@ -43,11 +48,32 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // 录音完成广播接收器
+    private val recordFinishReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != "SLEEP_RECORD_FINISHED") return
+            val audioPath = intent.getStringExtra("audioPath") ?: return
+            val pcmPath = intent.getStringExtra("pcmPath") ?: return
+            val startTime = intent.getLongExtra("startTime", 0L)
+            val endTime = intent.getLongExtra("endTime", 0L)
+
+            // 复用全局ViewModel工厂创建实例处理音频
+            val factory = SleepViewModelFactory(applicationContext)
+            val vm = factory.create(SleepViewModel::class.java)
+            vm.handleRecordFinish(audioPath, pcmPath, startTime, endTime)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        // 启动时检测麦克风权限，无权限则弹出申请框
+        // 注册录音完成广播过滤器
+        val filter = IntentFilter("SLEEP_RECORD_FINISHED")
+// 本广播仅App内部使用，不对外导出
+        registerReceiver(recordFinishReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+
+        // 启动时申请麦克风权限
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
             != PackageManager.PERMISSION_GRANTED
         ) {
@@ -72,5 +98,11 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        // 页面销毁注销广播，避免内存泄漏
+        unregisterReceiver(recordFinishReceiver)
     }
 }

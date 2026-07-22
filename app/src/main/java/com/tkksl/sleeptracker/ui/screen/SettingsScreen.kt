@@ -16,30 +16,28 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Nightlight
+import androidx.compose.material.icons.filled.SettingsVoice
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavHostController
-import com.tkksl.sleeptracker.LocalThemeManager
-import com.tkksl.sleeptracker.ui.component.TopBar
-import com.tkksl.sleeptracker.ui.theme.ErrorRed
-import com.tkksl.sleeptracker.viewmodel.SleepViewModel
-import com.tkksl.sleeptracker.viewmodel.SleepViewModelFactory
-import com.tkksl.sleeptracker.viewmodel.ThemeManager
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import com.tkksl.sleeptracker.LocalThemeManager
+import com.tkksl.sleeptracker.data.settings.RecordingQuality
+import com.tkksl.sleeptracker.ui.component.TopBar
+import com.tkksl.sleeptracker.viewmodel.SleepViewModel
+import com.tkksl.sleeptracker.viewmodel.ThemeManager
 import kotlinx.coroutines.flow.collectLatest
 
 // 通用设置条目组件
@@ -78,20 +76,20 @@ fun SettingItem(
 }
 
 @Composable
-fun SettingsScreen(navController: NavHostController) {
-    val context = LocalContext.current
-    val sleepVm: SleepViewModel = viewModel(factory = SleepViewModelFactory(context))
-    // 从全局容器获取唯一ThemeManager，不再单独new
-    val themeVm = LocalThemeManager.current
+fun SettingsScreen(
+    sleepVm: SleepViewModel
+) {
+    val themeVm: ThemeManager = LocalThemeManager.current
+    var isDarkMode by remember { mutableStateOf(themeVm.isDarkMode.value) }
+    var showClearAllDialog by remember { mutableStateOf(false) }
+    var showQualitySelectDialog by remember { mutableStateOf(false) }
 
-    var isDarkMode by remember { mutableStateOf(true) }
+    // 修复：规范LaunchedEffect监听主题流，不在组合层直接调用launch
     LaunchedEffect(themeVm) {
         themeVm.isDarkMode.collectLatest { newDark ->
             isDarkMode = newDark
         }
     }
-
-    var showClearAllDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -131,7 +129,29 @@ fun SettingsScreen(navController: NavHostController) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // 2.麦克风权限
+        // 2.录音质量设置
+        val currentQualityText = when (sleepVm.currentRecordQuality) {
+            RecordingQuality.LOW -> "低音质 16000Hz（省空间）"
+            RecordingQuality.NORMAL -> "标准音质 44100Hz（默认）"
+            RecordingQuality.HIGH -> "高清音质 48000Hz（声音分析）"
+        }
+        SettingItem(
+            contentIcon = {
+                Icon(
+                    imageVector = Icons.Filled.SettingsVoice,
+                    contentDescription = "录音质量",
+                    tint = MaterialTheme.colorScheme.onBackground,
+                    modifier = Modifier.size(24.dp)
+                )
+            },
+            title = "录音质量",
+            desc = currentQualityText,
+            onClick = { showQualitySelectDialog = true }
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // 3.麦克风权限
         SettingItem(
             contentIcon = {
                 Icon(
@@ -142,13 +162,12 @@ fun SettingsScreen(navController: NavHostController) {
                 )
             },
             title = "麦克风权限",
-            desc = "用于夜间睡眠声响记录",
-            onClick = {}
+            desc = "用于夜间睡眠声响记录"
         )
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // 3.存储位置
+        // 4.存储位置
         SettingItem(
             contentIcon = {
                 Icon(
@@ -159,13 +178,12 @@ fun SettingsScreen(navController: NavHostController) {
                 )
             },
             title = "存储位置",
-            desc = "本地离线存储，无云端上传",
-            onClick = {}
+            desc = "本地离线存储，无云端上传"
         )
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // 4.清除全部记录
+        // 5.清除全部记录
         SettingItem(
             contentIcon = {
                 Icon(
@@ -182,7 +200,7 @@ fun SettingsScreen(navController: NavHostController) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // 5.关于App
+        // 6.关于App
         SettingItem(
             contentIcon = {
                 Icon(
@@ -193,12 +211,43 @@ fun SettingsScreen(navController: NavHostController) {
                 )
             },
             title = "关于 Sleep Tracker",
-            desc = "纯本地离线睡眠记录工具",
-            onClick = {}
+            desc = "纯本地离线睡眠记录工具"
         )
     }
 
-    // 清空弹窗
+    // 录音质量选择弹窗
+    if (showQualitySelectDialog) {
+        AlertDialog(
+            onDismissRequest = { showQualitySelectDialog = false },
+            title = { Text("选择录音质量") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    QualityRadioOption(
+                        text = "低音质 16000Hz\n占用存储空间最小，仅用于声音采集",
+                        selected = sleepVm.currentRecordQuality == RecordingQuality.LOW,
+                        onClick = { sleepVm.setRecordingQuality(RecordingQuality.LOW) }
+                    )
+                    QualityRadioOption(
+                        text = "标准音质 44100Hz\n默认选项，平衡音质与存储",
+                        selected = sleepVm.currentRecordQuality == RecordingQuality.NORMAL,
+                        onClick = { sleepVm.setRecordingQuality(RecordingQuality.NORMAL) }
+                    )
+                    QualityRadioOption(
+                        text = "高清音质 48000Hz\n音质最佳，适合后续鼾声、环境音分析",
+                        selected = sleepVm.currentRecordQuality == RecordingQuality.HIGH,
+                        onClick = { sleepVm.setRecordingQuality(RecordingQuality.HIGH) }
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showQualitySelectDialog = false }) {
+                    Text("确定")
+                }
+            }
+        )
+    }
+
+    // 清空记录弹窗
     if (showClearAllDialog) {
         AlertDialog(
             onDismissRequest = { showClearAllDialog = false },
@@ -228,5 +277,24 @@ fun SettingsScreen(navController: NavHostController) {
                 }
             }
         )
+    }
+}
+
+// 弹窗内单选条目组件
+@Composable
+private fun QualityRadioOption(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        RadioButton(selected = selected, onClick = onClick)
+        Spacer(modifier = Modifier.size(8.dp))
+        Text(text = text)
     }
 }

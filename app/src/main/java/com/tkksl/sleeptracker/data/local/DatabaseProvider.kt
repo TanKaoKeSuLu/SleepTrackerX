@@ -16,7 +16,10 @@ object DatabaseProvider {
                 context.applicationContext,
                 SleepDatabase::class.java,
                 "sleep_database"
-            ).build()
+            )
+                // 开发阶段：版本变更直接重建数据库，不用写迁移脚本
+                .fallbackToDestructiveMigration()
+                .build()
 
             INSTANCE = instance
 
