@@ -1,4 +1,4 @@
-package com.tkksl.sleeptracker.data.audio
+package com.tkksl.data.audio
 
 import android.annotation.SuppressLint
 import android.media.AudioFormat
@@ -8,7 +8,6 @@ import com.tkksl.sleeptracker.data.settings.RecordingConfig
 import java.io.File
 import java.io.FileOutputStream
 import java.nio.ByteOrder
-import java.nio.ShortBuffer
 
 class AudioRecorder(
     private val config: RecordingConfig,
@@ -23,7 +22,7 @@ class AudioRecorder(
     private val channelConfig = AudioFormat.CHANNEL_IN_MONO
     private val audioFormat = AudioFormat.ENCODING_PCM_16BIT
     private val minBufferSize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat)
-    private val shortBufferSize = minBufferSize / 2 // 16bit = 2字节/采样，ShortArray长度减半
+    private val shortBufferSize = minBufferSize / 2 // 16bit = 2字节/采样
 
     @SuppressLint("MissingPermission")
     fun startRecording(outputFile: File) {
@@ -50,7 +49,6 @@ class AudioRecorder(
                     while (isRecording) {
                         val readSamples = audioRecord?.read(shortBuf, 0, shortBuf.size) ?: 0
                         if (readSamples > 0) {
-                            // 每次读取新建ByteBuffer，彻底清除上一轮残留字节
                             val byteBuf = java.nio.ByteBuffer.allocate(readSamples * 2).order(ByteOrder.LITTLE_ENDIAN)
                             byteBuf.asShortBuffer().put(shortBuf, 0, readSamples)
                             fos.write(byteBuf.array())
@@ -68,14 +66,18 @@ class AudioRecorder(
 
     fun stopRecording() {
         if (!isRecording) return
-        isRecording = false
         try {
+            // 第一步：先停止硬件录音，唤醒阻塞的 read()，让线程快速退出循环
             audioRecord?.stop()
         } catch (_: Exception) {}
+        // 第二步：再置停止标记
+        isRecording = false
         try {
-            recordingThread?.join(1000)
+            // 第三步：延长等待至3秒，确保尾部数据全部写入文件，避免长录音截断
+            recordingThread?.join(3000)
         } catch (_: Exception) {}
         recordingThread = null
+        // 第四步：最后释放资源
         release()
     }
 

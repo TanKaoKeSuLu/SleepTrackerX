@@ -21,14 +21,18 @@ class AudioPlayer {
     }
 
     fun play(filePath: String, onComplete: () -> Unit) {
+        // 先清空旧播放器的监听，再停止，避免旧回调延迟触发
+        mediaPlayer?.setOnCompletionListener(null)
         stop()
+
         mediaPlayer = MediaPlayer().apply {
             setDataSource(filePath)
-            prepare()
-            start()
+            // 先设置监听，再准备播放，避免漏掉完成事件
             setOnCompletionListener {
                 onComplete()
             }
+            prepare()
+            start()
         }
     }
 

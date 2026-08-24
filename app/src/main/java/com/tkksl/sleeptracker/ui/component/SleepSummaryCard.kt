@@ -23,13 +23,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.tkksl.sleeptracker.data.model.SleepRecord
 import com.tkksl.sleeptracker.utils.TimeFormatUtil
 
-// 5档分数配色
+// 亮色模式 5档分数配色
 private fun getScoreMainColor(score: Int): Color {
     return when {
         score >= 90 -> Color(0xFF2E7D32)    // 优秀-深绿
@@ -50,28 +51,18 @@ private fun getScoreLightBgColor(score: Int): Color {
     }
 }
 
-// 柔和版建议文案
-private fun getSleepAdviceText(score: Int, noiseCount: Int): String {
-    return when {
-        score >= 90 -> "睡眠质量极佳，作息稳定，继续保持当前习惯👍"
-        score >= 70 -> "睡眠状态良好，夜间干扰较少，作息比较规律"
-        score >= 50 -> "睡眠质量一般，检测到${noiseCount}次声响，建议睡前减少环境噪音"
-        score >= 30 -> "本次睡眠质量较差，声响较频繁，建议尽量保持卧室安静"
-        else -> "本次睡眠质量不佳，休息时长不足，建议保证每天不少于7小时睡眠"
-    }
-}
-
 @Composable
 private fun SummaryStatItem(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     labelText: String,
     valueText: String,
-    mainColor: Color
+    isDarkMode: Boolean,
+    accentColor: Color
 ) {
     Column(
         modifier = Modifier
             .widthIn(min = 70.dp)
-            .heightIn(min = 80.dp) // 固定最小高度，四个格子垂直对齐一致
+            .heightIn(min = 80.dp)
             .padding(horizontal = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.SpaceBetween
@@ -79,17 +70,17 @@ private fun SummaryStatItem(
         Icon(
             imageVector = icon,
             contentDescription = labelText,
-            tint = mainColor,
+            tint = if (isDarkMode) MaterialTheme.colorScheme.onSurfaceVariant else accentColor,
             modifier = Modifier.size(28.dp)
         )
         Text(
             text = labelText,
-            color = Color.Gray,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.labelSmall
         )
         Text(
             text = valueText,
-            color = mainColor,
+            color = if (isDarkMode) MaterialTheme.colorScheme.onSurface else accentColor,
             fontWeight = FontWeight.Medium,
             textAlign = TextAlign.Center
         )
@@ -99,12 +90,28 @@ private fun SummaryStatItem(
 @Composable
 fun SleepSummaryCard(
     record: SleepRecord,
+    isDarkMode: Boolean,
     modifier: Modifier = Modifier
 ) {
     val score = record.sleepScore
-    val mainColor = getScoreMainColor(score)
-    val cardBg = getScoreLightBgColor(score)
-    val adviceText = getSleepAdviceText(score, record.noiseEventCount)
+    val originAccent = getScoreMainColor(score)
+    val originBg = getScoreLightBgColor(score)
+
+    val cardContainerColor = if (isDarkMode) {
+        MaterialTheme.colorScheme.surface
+    } else {
+        originBg
+    }
+    val textHighlightColor = if (isDarkMode) {
+        MaterialTheme.colorScheme.onSurface
+    } else {
+        originAccent
+    }
+    val dividerColor = if (isDarkMode) {
+        MaterialTheme.colorScheme.outlineVariant
+    } else {
+        originAccent.copy(alpha = 0.15f)
+    }
 
     val starStr = when {
         score >= 90 -> "★★★★★"
@@ -125,28 +132,28 @@ fun SleepSummaryCard(
     val sleepStartStr = TimeFormatUtil.formatTimeStamp(record.startTime).split(" ")[1]
     val sleepEndStr = TimeFormatUtil.formatTimeStamp(record.endTime).split(" ")[1]
     val totalSec = record.duration
-    val durationShowText = if(totalSec < 60){
+    val durationShowText = if (totalSec < 60) {
         "${totalSec}秒"
-    }else{
+    } else {
         TimeFormatUtil.formatDurationText(totalSec)
     }
     val noiseCountStr = "${record.noiseEventCount}次"
 
     Card(
         modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = cardBg),
+        colors = CardDefaults.cardColors(containerColor = cardContainerColor),
         shape = MaterialTheme.shapes.large
     ) {
         Column(
-            modifier = Modifier.padding(vertical = 24.dp, horizontal = 16.dp), // 整体内边距收紧
+            modifier = Modifier.padding(vertical = 24.dp, horizontal = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp) // 整体间距缩小，卡片更紧致
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
                 text = starStr,
                 fontSize = MaterialTheme.typography.displayMedium.fontSize,
                 fontWeight = FontWeight.Bold,
-                color = mainColor,
+                color = textHighlightColor,
                 modifier = Modifier.fillMaxWidth(),
                 textAlign = TextAlign.Center
             )
@@ -155,17 +162,17 @@ fun SleepSummaryCard(
                 text = "$score 分",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
-                color = mainColor
+                color = textHighlightColor
             )
             Text(
                 text = "睡眠质量：$qualityStr",
                 style = MaterialTheme.typography.titleMedium,
-                color = mainColor.copy(alpha = 0.8f)
+                color = textHighlightColor.copy(alpha = 0.8f)
             )
 
             Divider(
                 modifier = Modifier.fillMaxWidth(),
-                color = mainColor.copy(alpha = 0.15f),
+                color = dividerColor,
                 thickness = 1.dp
             )
 
@@ -173,23 +180,16 @@ fun SleepSummaryCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                SummaryStatItem(icon = Icons.Filled.Bed, labelText = "睡眠时长", valueText = durationShowText, mainColor = mainColor)
-                SummaryStatItem(icon = Icons.Filled.Nightlight, labelText = "入睡时间", valueText = sleepStartStr, mainColor = mainColor)
-                SummaryStatItem(icon = Icons.Filled.WbSunny, labelText = "起床时间", valueText = sleepEndStr, mainColor = mainColor)
-                SummaryStatItem(icon = Icons.Filled.GraphicEq, labelText = "异常声音", valueText = noiseCountStr, mainColor = mainColor)
+                SummaryStatItem(icon = Icons.Filled.Bed, labelText = "睡眠时长", valueText = durationShowText, isDarkMode = isDarkMode, accentColor = originAccent)
+                SummaryStatItem(icon = Icons.Filled.Nightlight, labelText = "入睡时间", valueText = sleepStartStr, isDarkMode = isDarkMode, accentColor = originAccent)
+                SummaryStatItem(icon = Icons.Filled.WbSunny, labelText = "起床时间", valueText = sleepEndStr, isDarkMode = isDarkMode, accentColor = originAccent)
+                SummaryStatItem(icon = Icons.Filled.GraphicEq, labelText = "异常声音", valueText = noiseCountStr, isDarkMode = isDarkMode, accentColor = originAccent)
             }
 
             Divider(
                 modifier = Modifier.fillMaxWidth(),
-                color = mainColor.copy(alpha = 0.15f),
+                color = dividerColor,
                 thickness = 1.dp
-            )
-
-            Text(
-                text = adviceText,
-                color = Color.DarkGray,
-                style = MaterialTheme.typography.bodyMedium,
-                textAlign = TextAlign.Center
             )
         }
     }

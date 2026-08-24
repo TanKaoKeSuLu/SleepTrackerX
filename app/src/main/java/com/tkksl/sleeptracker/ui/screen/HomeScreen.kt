@@ -28,7 +28,8 @@ import com.tkksl.sleeptracker.utils.formatTimeStamp
 @Composable
 fun HomeScreen(
     navController: NavHostController,
-    viewModel: SleepViewModel
+    viewModel: SleepViewModel,
+    isDarkTheme: Boolean
 ) {
     val context = LocalContext.current
     val sleepViewModel: SleepViewModel = viewModel(factory = SleepViewModelFactory(context))
@@ -57,6 +58,7 @@ fun HomeScreen(
         RecordButton(
             isRecording = sleepViewModel.isRecording,
             elapsedTime = elapsedTime,
+            isDarkMode = isDarkTheme,
             onClick = {
                 sleepViewModel.toggleRecording()
             }

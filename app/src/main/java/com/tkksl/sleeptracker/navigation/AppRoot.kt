@@ -22,23 +22,21 @@ import kotlinx.coroutines.flow.collectLatest
 fun AppRoot(navController: NavHostController) {
     val context = LocalContext.current
     val themeVm: ThemeManager = viewModel(factory = SleepViewModelFactory(context))
-    // 核心：用remember包裹可变状态，配合collectLatest接收最新值
     var darkMode by remember { mutableStateOf(true) }
 
-    // key绑定themeVm，vm实例不变时持续监听；collectLatest保证只取最新主题值
     LaunchedEffect(themeVm) {
         themeVm.isDarkMode.collectLatest { newDark ->
             darkMode = newDark
         }
     }
 
-    // 外层SleepTrackerTheme会随darkMode变更自动重组，全局刷新配色
     SleepTrackerTheme(darkTheme = darkMode) {
         Scaffold(
             bottomBar = { BottomNavigationBar(navController = navController) }
         ) { innerPadding ->
             AppNavHost(
                 navController = navController,
+                isDarkTheme = darkMode,
                 modifier = Modifier.padding(innerPadding)
             )
         }

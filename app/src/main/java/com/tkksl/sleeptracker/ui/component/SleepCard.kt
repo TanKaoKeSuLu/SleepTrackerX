@@ -7,16 +7,23 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bed
+import androidx.compose.material.icons.filled.FiberManualRecord
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.tkksl.sleeptracker.ui.theme.Success
 
 // 三种卡片状态枚举
 sealed class SleepCardState {
@@ -42,7 +49,6 @@ fun SleepCard(
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
-        // 跟随主题动态卡片背景
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
     ) {
@@ -74,7 +80,7 @@ private fun EmptySleepView() {
     )
     Spacer(modifier = Modifier.height(16.dp))
     Text(
-        text = "点击上方按钮开始第一次睡眠记录",
+        text = "点击上方按钮开始第一次记录睡眠",
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
@@ -85,16 +91,26 @@ private fun EmptySleepView() {
 private fun RecordingSleepView(state: SleepCardState.Recording) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = "正在记录中",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onBackground
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = Icons.Filled.FiberManualRecord,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.error
+            )
+            Spacer(modifier = Modifier.size(8.dp))
+            Text(
+                text = "正在记录中",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+        }
         Text(
             text = "录制中",
-            color = Success,
+            color = MaterialTheme.colorScheme.onSurface,
             style = MaterialTheme.typography.titleMedium
         )
     }
@@ -115,7 +131,6 @@ private fun RecordingSleepView(state: SleepCardState.Recording) {
 // 状态3：存在完整睡眠数据
 @Composable
 private fun NormalSleepContentView(state: SleepCardState.Normal) {
-    // 顶部标题行：标题 + 睡眠评价
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween
@@ -126,15 +141,14 @@ private fun NormalSleepContentView(state: SleepCardState.Normal) {
             color = MaterialTheme.colorScheme.onBackground
         )
         Text(
-            text = "😊 ${state.sleepDesc}",
-            color = Success,
+            text = state.sleepDesc,
+            color = MaterialTheme.colorScheme.onSurface,
             style = MaterialTheme.typography.titleMedium
         )
     }
 
     Spacer(modifier = Modifier.height(24.dp))
 
-    // 核心睡眠时长
     Text(
         text = state.sleepDuration,
         style = MaterialTheme.typography.headlineLarge,
@@ -142,30 +156,56 @@ private fun NormalSleepContentView(state: SleepCardState.Normal) {
     )
 
     Spacer(modifier = Modifier.height(20.dp))
-    HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+    androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outline)
     Spacer(modifier = Modifier.height(20.dp))
 
-    // 底部明细信息
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(text = "🛌 入睡", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Filled.Bed,
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.size(6.dp))
+                Text(text = "入睡", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             Text(text = state.bedTime, color = MaterialTheme.colorScheme.onBackground)
         }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(text = "⏰ 起床", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Filled.WbSunny,
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.size(6.dp))
+                Text(text = "起床", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             Text(text = state.wakeTime, color = MaterialTheme.colorScheme.onBackground)
         }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(text = "⭐ 睡眠评分", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Filled.Star,
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.size(6.dp))
+                Text(text = "睡眠评分", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             Text(text = "${state.sleepScore}分", color = MaterialTheme.colorScheme.onBackground)
         }
     }

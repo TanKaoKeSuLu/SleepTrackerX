@@ -44,115 +44,93 @@ class SleepAnalyzer {
         pcmFile: File,
         sampleRate: Int
     ): Pair<SleepAnalysis, Double> {
-        val volumes = mutableListOf<Pair<Double, Double>>()
+        if (!pcmFile.exists() || pcmFile.length() <= 0) {
+            Log.e(TAG, "PCM文件不存在或者为空")
+            return emptyAnalysisResult()
+        }
 
-        var totalVolume = 0.0
-        var sampleCount = 0L
-        var maxVolume = 0.0
+        // ========== 第一遍流式读取：只采集前10秒数据，计算动态阈值 ==========
+        val backgroundVolumeList = mutableListOf<Double>()
+        var totalVolumeAll = 0.0
+        var sampleCountAll = 0L
+        var maxVolumeAll = 0.0
 
-        /*
-         * 第一阶段:
-         * 读取PCM
-         */
         FileInputStream(pcmFile).use { input ->
             val buffer = ByteArray(2048)
             var frameIndex = 0L
-
             while (true) {
                 val read = input.read(buffer)
-                if (read <= 0)
-                    break
-
+                if (read <= 0) break
                 val volume = calculateVolume(buffer, read)
-                val time = frameIndex * (read / 2.0) / sampleRate
+                val currentTime = frameIndex * (read / 2.0) / sampleRate
 
-                volumes.add(Pair(time, volume))
-                totalVolume += volume
-                sampleCount++
+                totalVolumeAll += volume
+                sampleCountAll++
+                if (volume > maxVolumeAll) maxVolumeAll = volume
 
-                if (volume > maxVolume) {
-                    maxVolume = volume
+                // 仅收集前10秒用于环境噪声阈值计算
+                if (currentTime <= 10.0) {
+                    backgroundVolumeList.add(volume)
                 }
                 frameIndex++
             }
         }
 
-        Log.d(TAG, "PCM读取完成，总采样帧数：${volumes.size}，全局最大音量：$maxVolume")
-        if (volumes.isEmpty()) {
-            Log.e(TAG, "PCM文件为空，无任何音量数据")
-            // 空数据，补全totalNoiseDuration，全部具名参数
-            return Pair(
-                SleepAnalysis(
-                    averageVolume = 0.0,
-                    maxVolume = 0.0,
-                    noiseCount = 0,
-                    totalNoiseDuration = 0.0,
-                    score = 100,
-                    events = emptyList()
-                ),
-                0.0
-            )
+        if (sampleCountAll == 0L) {
+            Log.e(TAG, "PCM无有效音频采样")
+            return emptyAnalysisResult()
         }
 
-        /*
-         * 第二阶段:
-         * 计算动态阈值
-         */
-        val threshold = calculateDynamicThreshold(volumes)
+        val threshold = calculateDynamicThreshold(backgroundVolumeList)
         Log.d(TAG, "动态检测阈值：$threshold")
 
-        /*
-         * 第三阶段:
-         * 检测声音事件
-         */
-        val rawEvents = detectEvents(volumes, threshold)
+        // ========== 第二遍流式读取：实时识别声响事件，不缓存全部音量 ==========
+        val rawEvents = detectEventsStream(pcmFile, sampleRate, threshold)
         Log.d(TAG, "原始检测声响数量：${rawEvents.size}")
 
-        /*
-         * 第四阶段:
-         * 合并事件（当前暂不处理合并波形，下一阶段修复merge逻辑）
-         */
+        // 合并相近事件
         val mergedEvents = mergeEvents(rawEvents)
         Log.d(TAG, "合并后最终声响数量：${mergedEvents.size}")
         val totalNoiseDuration = mergedEvents.sumOf { it.endSecond - it.startSecond }
 
-        val avgVolume = totalVolume / sampleCount.toDouble()
-
-        /*
-         * 找第一次有效声音
-         */
+        val avgVolume = totalVolumeAll / sampleCountAll.toDouble()
         val firstSound = mergedEvents.firstOrNull()?.startSecond ?: 0.0
 
         val analysis = SleepAnalysis(
             averageVolume = avgVolume,
-            maxVolume = maxVolume,
+            maxVolume = maxVolumeAll,
             noiseCount = mergedEvents.size,
             totalNoiseDuration = totalNoiseDuration,
             score = 100,
             events = mergedEvents
         )
-
         return Pair(analysis, firstSound)
+    }
+
+    private fun emptyAnalysisResult(): Pair<SleepAnalysis, Double> {
+        return Pair(
+            SleepAnalysis(
+                averageVolume = 0.0,
+                maxVolume = 0.0,
+                noiseCount = 0,
+                totalNoiseDuration = 0.0,
+                score = 100,
+                events = emptyList()
+            ),
+            0.0
+        )
     }
 
     /**
      * 动态计算阈值
      */
     private fun calculateDynamicThreshold(
-        volumes: List<Pair<Double, Double>>
+        background: List<Double>
     ): Double {
-        /*
-         * 取前10秒作为环境噪声
-         */
-        val background = volumes
-            .filter { it.first <= 10 }
-            .map { it.second }
-
         if (background.isEmpty()) {
             Log.d(TAG, "前10秒无音频数据，直接使用最低阈值$MIN_THRESHOLD")
             return MIN_THRESHOLD
         }
-
         val avg = background.average()
         val threshold = avg * 3
         val finalTh = threshold.coerceIn(MIN_THRESHOLD, MAX_THRESHOLD)
@@ -161,54 +139,77 @@ class SleepAnalyzer {
     }
 
     /**
-     * 初步检测事件，采集事件内全部音量并压缩生成waveform
+     * ✅【新增流式检测】逐段读取PCM，实时识别事件，不存储全部音量数据
      */
-    private fun detectEvents(
-        volumes: List<Pair<Double, Double>>,
+    private fun detectEventsStream(
+        pcmFile: File,
+        sampleRate: Int,
         threshold: Double
     ): MutableList<AudioEvent> {
         val events = mutableListOf<AudioEvent>()
+        FileInputStream(pcmFile).use { input ->
+            val buffer = ByteArray(2048)
+            var frameIndex = 0L
 
-        var inEvent = false
-        var start = 0.0
-        var maxVolume = 0.0
-        // 新增：缓存当前事件所有音量采样
-        val eventVolumes = mutableListOf<Double>()
+            var inEvent = false
+            var start = 0.0
+            var maxVolume = 0.0
+            val eventVolumes = mutableListOf<Double>()
 
-        for ((time, volume) in volumes) {
-            if (volume > threshold) {
-                // 记录当前帧音量用于波形
-                eventVolumes.add(volume)
+            while (true) {
+                val read = input.read(buffer)
+                if (read <= 0) break
+                val volume = calculateVolume(buffer, read)
+                val currentTime = frameIndex * (read / 2.0) / sampleRate
 
-                if (!inEvent) {
-                    inEvent = true
-                    start = time
-                    maxVolume = volume
-                } else {
-                    if (volume > maxVolume)
+                if (volume > threshold) {
+                    eventVolumes.add(volume)
+                    if (!inEvent) {
+                        inEvent = true
+                        start = currentTime
                         maxVolume = volume
-                }
-            } else {
-                if (inEvent) {
-                    val duration = time - start
-                    if (duration >= MIN_EVENT_DURATION) {
-                        // 压缩音量采样生成波形
-                        val waveData = compressWaveform(eventVolumes)
-                        events.add(
-                            AudioEvent(
-                                startSecond = start,
-                                endSecond = time,
-                                maxVolume = maxVolume,
-                                peakTime = (start + time) / 2,
-                                waveform = waveData,
-                                type = AudioType.UNKNOWN
-                            )
-                        )
-                        Log.d(TAG, "成功识别声响：开始=$start 结束=$time 持续=$duration 秒")
+                    } else {
+                        if (volume > maxVolume) maxVolume = volume
                     }
-                    // 清空缓存，准备下一个事件
-                    eventVolumes.clear()
-                    inEvent = false
+                } else {
+                    if (inEvent) {
+                        val duration = currentTime - start
+                        if (duration >= MIN_EVENT_DURATION) {
+                            val waveData = compressWaveform(eventVolumes)
+                            events.add(
+                                AudioEvent(
+                                    startSecond = start,
+                                    endSecond = currentTime,
+                                    maxVolume = maxVolume,
+                                    peakTime = (start + currentTime) / 2,
+                                    waveform = waveData,
+                                    type = AudioType.UNKNOWN
+                                )
+                            )
+                            Log.d(TAG, "成功识别声响：开始=$start 结束=$currentTime 持续=$duration 秒")
+                        }
+                        eventVolumes.clear()
+                        inEvent = false
+                    }
+                }
+                frameIndex++
+            }
+
+            // 处理文件末尾还处于事件中的情况
+            if (inEvent) {
+                val duration = pcmFile.length() / (2.0 * sampleRate) - start
+                if (duration >= MIN_EVENT_DURATION) {
+                    val waveData = compressWaveform(eventVolumes)
+                    events.add(
+                        AudioEvent(
+                            startSecond = start,
+                            endSecond = pcmFile.length() / (2.0 * sampleRate),
+                            maxVolume = maxVolume,
+                            peakTime = (start + pcmFile.length() / (2.0 * sampleRate)) / 2,
+                            waveform = waveData,
+                            type = AudioType.UNKNOWN
+                        )
+                    )
                 }
             }
         }

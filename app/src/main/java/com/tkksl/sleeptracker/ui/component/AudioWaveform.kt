@@ -14,7 +14,7 @@ import androidx.compose.ui.unit.dp
 fun AudioWaveform(
     waveformData: List<Float>,
     modifier: Modifier = Modifier,
-    lineColor: Color = Color(0xFF607D8B),
+    lineColor: Color,
     lineWidth: Float = 2f
 ) {
     Canvas(
@@ -26,7 +26,6 @@ fun AudioWaveform(
         val pointCount = waveformData.size
         val segmentWidth = size.width / pointCount
 
-        // 生成波形坐标点
         val points = waveformData.mapIndexed { index, volume ->
             val x = index * segmentWidth
             val maxHeight = size.height / 2
@@ -34,7 +33,6 @@ fun AudioWaveform(
             Offset(x, y)
         }
 
-        // 逐段连线绘制平滑波形
         for (i in 0 until points.size - 1) {
             drawLine(
                 start = points[i],

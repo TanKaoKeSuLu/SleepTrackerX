@@ -19,6 +19,7 @@ import com.tkksl.sleeptracker.viewmodel.SleepViewModelFactory
 @Composable
 fun AppNavHost(
     navController: NavHostController,
+    isDarkTheme: Boolean,
     modifier: Modifier = Modifier
 ) {
     // 全局唯一共享ViewModel
@@ -33,7 +34,8 @@ fun AppNavHost(
         composable(Screen.Home.route) {
             HomeScreen(
                 navController = navController,
-                viewModel = sharedSleepVm
+                viewModel = sharedSleepVm,
+                isDarkTheme = isDarkTheme
             )
         }
         composable(Screen.History.route) {
@@ -57,6 +59,7 @@ fun AppNavHost(
             SleepDetailScreen(
                 recordId = recordId,
                 viewModel = sharedSleepVm,
+                isDarkTheme = isDarkTheme,
                 onBack = { navController.popBackStack() }
             )
         }

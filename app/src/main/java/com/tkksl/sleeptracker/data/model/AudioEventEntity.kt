@@ -26,10 +26,11 @@ data class AudioEventEntity(
     val maxVolume: Double,
     val peakTime: Double = 0.0,
     val type: AudioType = AudioType.UNKNOWN,
-    // 新增：波形浮点数组JSON字符串，Room不支持直接存储List<Float>
-    val waveformJson: String = ""
+    // 波形浮点数组JSON字符串
+    val waveformJson: String = "",
+    // 新增：单条事件对应的音频片段文件路径
+    val clipPath: String = ""
 ) {
-    // 事件持续时长，不用业务层重复计算
     val duration: Double
         get() = endSecond - startSecond
 }
