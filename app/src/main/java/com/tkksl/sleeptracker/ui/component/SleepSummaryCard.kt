@@ -35,9 +35,9 @@ private fun getScoreMainColor(score: Int): Color {
     return when {
         score >= 90 -> Color(0xFF2E7D32)    // 优秀-深绿
         score >= 70 -> Color(0xFF1976D2)    // 良好-深蓝
-        score >= 50 -> Color(0xFFF57C00)    // 一般-橙黄
+        score >= 50 -> Color(0xFFF6912E)    // 一般-橙黄
         score >= 30 -> Color(0xFFEF6C00)    // 较差-橙红
-        else -> Color(0xFFD32F2F)           // 很差-深红
+        else -> Color(0xFFD33E3E)           // 很差-深红
     }
 }
 

@@ -1,16 +1,12 @@
 package com.tkksl.sleeptracker.navigation
 
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
-import com.tkksl.sleeptracker.ui.component.BottomNavigationBar
 import com.tkksl.sleeptracker.ui.theme.SleepTrackerTheme
 import com.tkksl.sleeptracker.viewmodel.SleepViewModelFactory
 import com.tkksl.sleeptracker.viewmodel.ThemeManager
@@ -31,14 +27,9 @@ fun AppRoot(navController: NavHostController) {
     }
 
     SleepTrackerTheme(darkTheme = darkMode) {
-        Scaffold(
-            bottomBar = { BottomNavigationBar(navController = navController) }
-        ) { innerPadding ->
-            AppNavHost(
-                navController = navController,
-                isDarkTheme = darkMode,
-                modifier = Modifier.padding(innerPadding)
-            )
-        }
+        AppNavHost(
+            navController = navController,
+            isDarkTheme = darkMode
+        )
     }
 }

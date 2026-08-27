@@ -122,7 +122,7 @@ private fun RecordingSleepView(state: SleepCardState.Recording) {
     )
     Spacer(modifier = Modifier.height(16.dp))
     Text(
-        text = "设备正在后台监听夜间声响",
+        text = "设备正在后台记录睡眠声响",
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )

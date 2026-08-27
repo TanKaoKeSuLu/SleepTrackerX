@@ -14,9 +14,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.tkksl.sleeptracker.data.analyzer.volumeToDb
 import com.tkksl.sleeptracker.data.model.SleepRecord
 import com.tkksl.sleeptracker.utils.TimeFormatUtil
+import com.tkksl.sleeptracker.utils.volumeToHumanLevel
 
 @Composable
 private fun GridTwoItemRow(leftLabel: String, leftValue: String, rightLabel: String, rightValue: String) {
@@ -82,23 +82,15 @@ fun SleepInfoGrid(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = "睡眠基础",
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                GridTwoItemRow(
-                    leftLabel = "入睡时间", leftValue = TimeFormatUtil.formatTimeStamp(record.startTime),
-                    rightLabel = "醒来时间", rightValue = TimeFormatUtil.formatTimeStamp(record.endTime)
-                )
-
-                Text(
                     text = "录音参数",
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 GridTwoItemRow(
-                    leftLabel = "总时长", leftValue = if(record.duration <60) "${record.duration}秒" else TimeFormatUtil.formatDurationText(record.duration),
-                    rightLabel = "采样率", rightValue = "${record.sampleRate} Hz"
+                    leftLabel = "总时长",
+                    leftValue = if (record.duration < 60) "${record.duration}秒" else TimeFormatUtil.formatDurationText(record.duration),
+                    rightLabel = "采样率",
+                    rightValue = "${record.sampleRate} Hz"
                 )
 
                 Text(
@@ -106,12 +98,13 @@ fun SleepInfoGrid(
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
-                // 归一化音量转分贝展示
-                val avgDb = volumeToDb(record.avgVolume)
-                val maxWholeDb = volumeToDb(record.maxWholeVolume)
+                val avgLevel = volumeToHumanLevel(record.avgVolume)
+                val maxWholeLevel = volumeToHumanLevel(record.maxWholeVolume)
                 GridTwoItemRow(
-                    leftLabel = "平均分贝", leftValue = "$avgDb dB",
-                    rightLabel = "全局峰值分贝", rightValue = "$maxWholeDb dB"
+                    leftLabel = "平均声响等级",
+                    leftValue = "$avgLevel / 100",
+                    rightLabel = "全局峰值等级",
+                    rightValue = "$maxWholeLevel / 100"
                 )
             }
         }

@@ -77,14 +77,17 @@ fun SettingItem(
 
 @Composable
 fun SettingsScreen(
-    sleepVm: SleepViewModel
+    sleepVm: SleepViewModel,
+    modifier: Modifier = Modifier
 ) {
     val themeVm: ThemeManager = LocalThemeManager.current
-    var isDarkMode by remember { mutableStateOf(themeVm.isDarkMode.value) }
+    // 解包录音质量State
+    val currentQuality by remember { sleepVm.currentRecordQuality }
+
+    var isDarkMode by remember { mutableStateOf(false) }
     var showClearAllDialog by remember { mutableStateOf(false) }
     var showQualitySelectDialog by remember { mutableStateOf(false) }
 
-    // 修复：规范LaunchedEffect监听主题流，不在组合层直接调用launch
     LaunchedEffect(themeVm) {
         themeVm.isDarkMode.collectLatest { newDark ->
             isDarkMode = newDark
@@ -92,7 +95,7 @@ fun SettingsScreen(
     }
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .padding(horizontal = 20.dp),
         verticalArrangement = Arrangement.Top
@@ -120,20 +123,38 @@ fun SettingsScreen(
             title = "显示主题",
             desc = if (isDarkMode) "深色（夜间）" else "浅色（日间）",
             toggleContent = {
+                val isDark = isDarkMode
                 Switch(
-                    checked = isDarkMode,
-                    onCheckedChange = { themeVm.toggleTheme() }
+                    checked = isDark,
+                    onCheckedChange = { themeVm.toggleTheme() },
+                    colors = androidx.compose.material3.SwitchDefaults.colors(
+                        checkedThumbColor = MaterialTheme.colorScheme.primary,
+                        checkedTrackColor = MaterialTheme.colorScheme.primaryContainer,
+                        checkedBorderColor = MaterialTheme.colorScheme.outline,
+
+                        uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant,
+                        uncheckedBorderColor = if (!isDark) {
+                            MaterialTheme.colorScheme.onSurface
+                        } else {
+                            MaterialTheme.colorScheme.outline
+                        }
+                    )
                 )
             }
         )
 
+
+
         Spacer(modifier = Modifier.height(16.dp))
 
         // 2.录音质量设置
-        val currentQualityText = when (sleepVm.currentRecordQuality) {
+        val currentQualityText = when (currentQuality) {
             RecordingQuality.LOW -> "低音质 16000Hz（省空间）"
             RecordingQuality.NORMAL -> "标准音质 44100Hz（默认）"
             RecordingQuality.HIGH -> "高清音质 48000Hz（声音分析）"
+            // 补齐else，保证when穷尽，消除编译警告
+            else -> "标准音质 44100Hz（默认）"
         }
         SettingItem(
             contentIcon = {
@@ -223,18 +244,18 @@ fun SettingsScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     QualityRadioOption(
-                        text = "低音质 16000Hz\n占用存储空间最小，仅用于声音采集",
-                        selected = sleepVm.currentRecordQuality == RecordingQuality.LOW,
+                        text = "低音质 16000Hz\n占用存储最小，仅用于声音采集",
+                        selected = currentQuality == RecordingQuality.LOW,
                         onClick = { sleepVm.setRecordingQuality(RecordingQuality.LOW) }
                     )
                     QualityRadioOption(
                         text = "标准音质 44100Hz\n默认选项，平衡音质与存储",
-                        selected = sleepVm.currentRecordQuality == RecordingQuality.NORMAL,
+                        selected = currentQuality == RecordingQuality.NORMAL,
                         onClick = { sleepVm.setRecordingQuality(RecordingQuality.NORMAL) }
                     )
                     QualityRadioOption(
-                        text = "高清音质 48000Hz\n音质最佳，适合后续鼾声、环境音分析",
-                        selected = sleepVm.currentRecordQuality == RecordingQuality.HIGH,
+                        text = "高清音质 48000Hz\n音质最佳，适合鼾声、梦话分析",
+                        selected = currentQuality == RecordingQuality.HIGH,
                         onClick = { sleepVm.setRecordingQuality(RecordingQuality.HIGH) }
                     )
                 }

@@ -27,6 +27,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -52,9 +54,9 @@ fun SleepDetailScreen(
         viewModel.loadRecordDetail(recordId)
     }
 
-    val fullRecord: SleepRecordWithEvents? = viewModel.currentFullRecord
-    val eventList: List<AudioEvent> = viewModel.detailEventList
-    val isPlaying: Boolean = viewModel.isPlaying
+    val fullRecord: SleepRecordWithEvents? by remember { viewModel.currentFullRecord }
+    val eventList: List<AudioEvent> by remember { viewModel.detailEventList }
+    val currentPlaySec by remember { viewModel.currentPlayingSegmentStartSec }
 
     Scaffold(
         modifier = Modifier.fillMaxWidth(),
@@ -73,8 +75,10 @@ fun SleepDetailScreen(
             )
         },
         bottomBar = {
-            if (fullRecord != null) {
-                val totalSec = fullRecord.record.duration
+            // 局部缓存，支持智能转换
+            val recordTemp = fullRecord
+            if (recordTemp != null) {
+                val totalSec = recordTemp.record.duration
                 val totalTimeStr = if(totalSec < 60) "${totalSec}秒" else TimeFormatUtil.formatDurationText(totalSec)
 
                 Card(
@@ -124,14 +128,16 @@ fun SleepDetailScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
             contentPadding = PaddingValues(bottom = 80.dp)
         ) {
-            if (fullRecord == null) {
+            // 局部临时变量，解决委托属性无法智能转换
+            val recordTemp = fullRecord
+            if (recordTemp == null) {
                 item {
                     Text(text = "加载中...", modifier = Modifier.padding(top = 40.dp))
                 }
                 return@LazyColumn
             }
 
-            val record = fullRecord.record
+            val record = recordTemp.record
 
             item {
                 SleepSummaryCard(record = record, isDarkMode = isDarkTheme)
@@ -172,8 +178,8 @@ fun SleepDetailScreen(
                     AudioEventTimelineItem(
                         event = event,
                         recordGlobalStartTime = record.startTime,
-                        isItemPlaying = viewModel.currentPlayingSegmentStartSec == event.startSecond,
-                        canPlay = event.clipPath.isNotBlank(), // 有片段文件则可播放
+                        isItemPlaying = currentPlaySec == event.startSecond,
+                        canPlay = event.clipPath.isNotBlank(),
                         onPlayClick = {
                             viewModel.playAudioSegment(event.clipPath, event.startSecond)
                         },

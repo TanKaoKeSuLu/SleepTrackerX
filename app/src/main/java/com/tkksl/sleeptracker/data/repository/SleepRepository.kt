@@ -1,5 +1,7 @@
 package com.tkksl.sleeptracker.data.repository
 
+import android.util.Log
+import androidx.room.Transaction
 import com.tkksl.sleeptracker.data.local.SleepDao
 import com.tkksl.sleeptracker.data.model.AudioEventEntity
 import com.tkksl.sleeptracker.data.model.SleepRecord
@@ -9,17 +11,24 @@ import kotlinx.coroutines.flow.firstOrNull
 import java.io.File
 
 class SleepRepository(private val sleepDao: SleepDao) {
-    // 完整插入睡眠记录+声响事件，返回是否插入成功
+    companion object {
+        private const val TAG = "SleepRepository"
+    }
+
+    // 完整插入睡眠记录+声响事件，返回是否插入成功，原子事务：全部成功/全部回滚
+    @Transaction
     suspend fun insertFullSleepRecord(
         record: SleepRecord,
         eventList: List<AudioEventEntity>
     ): Boolean {
         return try {
             val recordId = sleepDao.insertSleepRecord(record)
+            Log.d(TAG, "insertFullSleepRecord new recordId=$recordId")
             val eventsWithId = eventList.map { it.copy(sleepRecordId = recordId) }
             sleepDao.insertAudioEvents(eventsWithId)
             true
         } catch (e: Exception) {
+            Log.e(TAG, "insertFullSleepRecord insert failed", e)
             false
         }
     }
@@ -29,18 +38,21 @@ class SleepRepository(private val sleepDao: SleepDao) {
     suspend fun getRecordWithEvents(recordId: Long): SleepRecordWithEvents? =
         sleepDao.getRecordWithAllEvents(recordId)
 
+    @Suppress("unused")
     suspend fun getSingleRecordById(id: Long): SleepRecord? = sleepDao.getSingleSleepRecord(id)
 
     suspend fun getLatestSleepRecord(): SleepRecord? = sleepDao.getLatestSleepRecord()
 
     // ------------------- 删除逻辑 -------------------
-    // 修复：加上 suspend 修饰符，内部可调用挂起函数
     private suspend fun deleteEventClipFiles(recordId: Long) {
         val eventList = sleepDao.getRecordWithAllEvents(recordId)?.events ?: return
         eventList.forEach { event ->
             if (event.clipPath.isBlank()) return@forEach
             val clipFile = File(event.clipPath)
-            if (clipFile.exists()) clipFile.delete()
+            if (clipFile.exists()) {
+                val deleted = clipFile.delete()
+                Log.d(TAG, "delete clip file ${event.clipPath}, deleted=$deleted")
+            }
         }
     }
 

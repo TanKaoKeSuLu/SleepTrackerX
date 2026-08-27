@@ -35,24 +35,26 @@ import com.tkksl.sleeptracker.viewmodel.SleepViewModel
 fun HistoryScreen(
     navController: NavController,
     modifier: Modifier = Modifier,
-    viewModel: SleepViewModel // 直接接收全局共享Vm，不内部新建
+    viewModel: SleepViewModel
 ) {
-    // 删除页面内部新建viewModel代码
-    val recordList = viewModel.allRecordList
+    // 使用 by remember 订阅State，自动解包并支持页面响应刷新
+    val recordList by remember { viewModel.allRecordList }
+    val isMultiSelectMode by remember { viewModel.isMultiSelectMode }
+    val selectedIdSet by remember { viewModel.selectedIdSet }
 
     var showDeleteDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         modifier = modifier.fillMaxWidth(),
         bottomBar = {
-            if (viewModel.isMultiSelectMode) {
+            if (isMultiSelectMode) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(20.dp)
                 ) {
                     Text(
-                        text = "已选中 ${viewModel.selectedIdSet.size} 条记录",
+                        text = "已选中 ${selectedIdSet.size} 条记录",
                         style = MaterialTheme.typography.titleMedium
                     )
                     Spacer(modifier = Modifier.height(12.dp))
@@ -61,12 +63,12 @@ fun HistoryScreen(
                             onClick = { viewModel.selectAllOrCancel() },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text(if(viewModel.selectedIdSet.size == recordList.size) "取消全选" else "全选")
+                            Text(if (selectedIdSet.size == recordList.size) "取消全选" else "全选")
                         }
                         Button(
                             onClick = { showDeleteDialog = true },
                             modifier = Modifier.fillMaxWidth(),
-                            enabled = viewModel.selectedIdSet.isNotEmpty()
+                            enabled = selectedIdSet.isNotEmpty()
                         ) {
                             Text("删除选中记录")
                         }
@@ -91,7 +93,7 @@ fun HistoryScreen(
                     style = MaterialTheme.typography.headlineMedium
                 )
                 TextButton(onClick = { viewModel.switchSelectMode() }) {
-                    Text(if (viewModel.isMultiSelectMode) "完成" else "选择")
+                    Text(if (isMultiSelectMode) "完成" else "选择")
                 }
             }
 
@@ -121,7 +123,7 @@ fun HistoryScreen(
                         val h = record.duration / 3600
                         val m = (record.duration % 3600) / 60
                         val timeText = "${h}h${m}m"
-                        val color = when(record.quality){
+                        val color = when (record.quality) {
                             "Good" -> SleepQualityColor.Good
                             "Normal" -> SleepQualityColor.Normal
                             else -> SleepQualityColor.Bad
@@ -134,8 +136,8 @@ fun HistoryScreen(
                             bedTime = bedStr,
                             wakeTime = wakeStr,
                             qualityColor = color,
-                            isMultiSelect = viewModel.isMultiSelectMode,
-                            isChecked = viewModel.selectedIdSet.contains(record.id),
+                            isMultiSelect = isMultiSelectMode,
+                            isChecked = selectedIdSet.contains(record.id),
                             onCardClick = {
                                 navController.navigate(Screen.Detail.createRoute(record.id))
                             },

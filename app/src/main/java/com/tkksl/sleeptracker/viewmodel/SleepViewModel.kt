@@ -1,10 +1,10 @@
 package com.tkksl.sleeptracker.viewmodel
 
 import android.app.Application
-import android.content.Intent
-import android.os.Build
+import android.os.Bundle
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.State
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.tkksl.sleeptracker.data.audio.AudioPlayer
@@ -16,10 +16,8 @@ import com.tkksl.sleeptracker.data.model.SleepRecordWithEvents
 import com.tkksl.sleeptracker.data.repository.SleepRepository
 import com.tkksl.sleeptracker.data.settings.RecordingQuality
 import com.tkksl.sleeptracker.data.analyzer.AudioEvent
-import com.tkksl.sleeptracker.data.analyzer.SleepAnalysis
-import com.tkksl.sleeptracker.data.analyzer.SleepAnalyzer
+import com.tkksl.sleeptracker.data.analyzer.AudioType
 import com.tkksl.sleeptracker.data.analyzer.SleepScoreCalculator
-import com.tkksl.sleeptracker.data.audio.WavConverter
 import com.tkksl.sleeptracker.data.settings.RecordingConfig
 import com.tkksl.sleeptracker.utils.SettingsSp
 import kotlinx.coroutines.Dispatchers
@@ -29,19 +27,15 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import java.io.File
-import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.Duration.Companion.seconds
+import android.util.Log
 
 class SleepViewModel(application: Application) : AndroidViewModel(application) {
     private val audioPlayer = AudioPlayer()
-    private val appContext = getApplication<Application>()
-    private val sleepAnalyzer = SleepAnalyzer()
+    private val appContext: Application = getApplication()
 
     private val sleepDao = DatabaseProvider.getDatabase(appContext).sleepDao()
     private val repo = SleepRepository(sleepDao)
-
-    // 防重：已处理文件路径缓存，5秒内同一文件不再重复入库
-    private val handledFileCache = ConcurrentHashMap<String, Long>()
 
     // 波形JSON字符串解析为List<Float>
     private fun parseWaveformJson(json: String): List<Float> {
@@ -54,54 +48,39 @@ class SleepViewModel(application: Application) : AndroidViewModel(application) {
         return result
     }
 
-    // ========== Compose State 统一规范写法 ==========
+    // ========== Compose State 标准规范：私有MutableState，对外暴露只读State ==========
     private val _currentRecordQuality = mutableStateOf(SettingsSp.getRecordQuality(appContext))
-    val currentRecordQuality: RecordingQuality
-        get() = _currentRecordQuality.value
+    val currentRecordQuality: State<RecordingQuality> = _currentRecordQuality
 
     private val _elapsedSeconds = mutableLongStateOf(0L)
-    val elapsedSeconds: Long
-        get() = _elapsedSeconds.value
+    val elapsedSeconds: State<Long> = _elapsedSeconds
 
     private val _isRecording = mutableStateOf(false)
-    val isRecording: Boolean
-        get() = _isRecording.value
+    val isRecording: State<Boolean> = _isRecording
 
     private val _latestRecord = mutableStateOf<SleepRecord?>(null)
-    val latestRecord: SleepRecord?
-        get() = _latestRecord.value
+    val latestRecord: State<SleepRecord?> = _latestRecord
 
     private val _allRecordList = mutableStateOf<List<SleepRecord>>(emptyList())
-    val allRecordList: List<SleepRecord>
-        get() = _allRecordList.value
+    val allRecordList: State<List<SleepRecord>> = _allRecordList
 
-    // Room原始查询结果（数据库实体，仅内部中转）
     private val _currentFullRecord = mutableStateOf<SleepRecordWithEvents?>(null)
-    // 新增对外只读属性，给SleepDetailScreen页面访问
-    val currentFullRecord: SleepRecordWithEvents?
-        get() = _currentFullRecord.value
+    val currentFullRecord: State<SleepRecordWithEvents?> = _currentFullRecord
 
-    // UI专用：转换完成、带波形数据的AudioEvent列表
     private val _detailEventList = mutableStateOf<List<AudioEvent>>(emptyList())
-    val detailEventList: List<AudioEvent>
-        get() = _detailEventList.value
+    val detailEventList: State<List<AudioEvent>> = _detailEventList
 
     private val _isPlaying = mutableStateOf(false)
-    val isPlaying: Boolean
-        get() = _isPlaying.value
+    val isPlaying: State<Boolean> = _isPlaying
 
-    // 新增：当前播放的片段起始秒，null代表没有播放片段
     private val _currentPlayingSegmentStartSec = mutableStateOf<Double?>(null)
-    val currentPlayingSegmentStartSec: Double?
-        get() = _currentPlayingSegmentStartSec.value
+    val currentPlayingSegmentStartSec: State<Double?> = _currentPlayingSegmentStartSec
 
     private val _isMultiSelectMode = mutableStateOf(false)
-    val isMultiSelectMode: Boolean
-        get() = _isMultiSelectMode.value
+    val isMultiSelectMode: State<Boolean> = _isMultiSelectMode
 
     private val _selectedIdSet = mutableStateOf(setOf<Long>())
-    val selectedIdSet: Set<Long>
-        get() = _selectedIdSet.value
+    val selectedIdSet: State<Set<Long>> = _selectedIdSet
 
     private var timerJob: Job? = null
     private var startTs = 0L
@@ -114,167 +93,96 @@ class SleepViewModel(application: Application) : AndroidViewModel(application) {
         audioPlayer.release()
     }
 
-    // 外部全局广播回调入口（仅Application调用）
-    fun handleRecordFinish(audioPath: String, pcmPath: String, startTime: Long, endTime: Long) {
-        val now = System.currentTimeMillis()
-        val lastHandleTime = handledFileCache[audioPath] ?: 0L
-        if (now - lastHandleTime < 5000) return
-        handledFileCache[audioPath] = now
+    /**
+     * 【新链路】流式分析结果广播入口
+     */
+    fun handleStreamAnalysisResult(
+        startTs: Long,
+        endTs: Long,
+        sampleRate: Int,
+        totalNoiseDuration: Double,
+        avgVolume: Double,
+        maxWholeVolume: Double,
+        eventBundleList: ArrayList<Bundle>,
+        pcmFilePath: String?
+    ) {
+        val durationSecTotal = (endTs - startTs) / 1000.0
+        Log.d("StreamAnalyze", "收到流式结果 duration=$durationSecTotal, eventCount=${eventBundleList.size}")
 
-        if (pcmPath.isEmpty() || startTime <= 0 || endTime <= startTime) return
-        val durationSecTotal = (endTime - startTime) / 1000.0
-
-        // 小于10秒直接丢弃，同时删除PCM文件
         if (durationSecTotal < 10.0) {
-            File(pcmPath).takeIf { it.exists() }?.delete()
+            Log.d("StreamAnalyze", "时长不足10s，丢弃本次记录")
             return
         }
+        if (eventBundleList.isNullOrEmpty()) return
 
-        // IO heavy 任务全部调度至IO线程，增加全局异常兜底
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val sampleRate = when (_currentRecordQuality.value) {
-                    RecordingQuality.LOW -> 16000
-                    RecordingQuality.NORMAL -> 44100
-                    RecordingQuality.HIGH -> 48000
-                }
+                val eventEntities = mutableListOf<AudioEventEntity>()
+                for (b in eventBundleList) {
+                    val startSec = b.getDouble("startSecond")
+                    val endSec = b.getDouble("endSecond")
+                    val peakTime = b.getDouble("peakTime")
+                    val maxVol = b.getDouble("maxVolume")
+                    val typeOrdinal = b.getInt("typeOrdinal")
+                    val audioType = AudioType.values()[typeOrdinal]
+                    val clipPath = b.getString("clipPath") ?: ""
 
-                val pcmFile = File(pcmPath)
-                val fileSize = if (pcmFile.exists()) pcmFile.length() else 0L
-
-                // 步骤1：执行音频分析
-                val (analysisResult, cutOffset) = if (pcmFile.exists()) {
-                    sleepAnalyzer.analyze(pcmFile = pcmFile, sampleRate)
-                } else {
-                    Pair(
-                        SleepAnalysis(
-                            averageVolume = 0.0,
-                            maxVolume = 0.0,
-                            noiseCount = 0,
-                            totalNoiseDuration = 0.0,
-                            score = 100,
-                            events = emptyList()
-                        ),
-                        0.0
+                    eventEntities.add(
+                        AudioEventEntity(
+                            sleepRecordId = 0,
+                            startSecond = startSec,
+                            endSecond = endSec,
+                            peakTime = peakTime,
+                            maxVolume = maxVol,
+                            type = audioType,
+                            waveformJson = "",
+                            clipPath = clipPath
+                        )
                     )
                 }
 
-                // 修正事件时间偏移
-                val fixedEvents = analysisResult.events.map { e ->
-                    e.copy(
-                        startSecond = e.startSecond - cutOffset,
-                        endSecond = e.endSecond - cutOffset,
-                        peakTime = e.peakTime - cutOffset
-                    )
-                }
-
-                val noiseCount = fixedEvents.size
-                val avgVol = analysisResult.averageVolume
-                val maxVolWhole = analysisResult.maxVolume
-
+                val noiseCount = eventEntities.size
+                // 真实睡眠分数计算
                 val sleepScore = SleepScoreCalculator.calculate(
                     totalSecond = durationSecTotal,
-                    noiseDuration = analysisResult.totalNoiseDuration,
+                    noiseDuration = totalNoiseDuration,
                     noiseEventCount = noiseCount,
-                    maxVolume = maxVolWhole
+                    maxVolume = maxWholeVolume
                 )
-
-                // ========== 批量生成事件片段 ==========
-                val clipsDir = File(pcmFile.parent, "clips")
-                if (!clipsDir.exists()) clipsDir.mkdirs()
-
-                val recordConfig = RecordingConfig(
-                    sampleRate = sampleRate,
-                    bitDepth = 16,
-                    channelCount = 1
-                )
-                val wavConverter = WavConverter(recordConfig)
-                val clipTotalDuration = 15.0 // 每个片段总时长15秒
-                val preOffset = 2.0 // 事件起点前预留2秒
-
-                val eventEntities = mutableListOf<AudioEventEntity>()
-                for (audioEvent in fixedEvents) {
-                    try {
-                        // 计算片段起始时间，不小于0
-                        val clipStart = maxOf(0.0, audioEvent.startSecond - preOffset)
-                        // 生成片段文件名，用时间戳保证唯一
-                        val clipFileName = "clip_${(startTime + clipStart * 1000).toLong()}.wav"
-                        val clipFile = File(clipsDir, clipFileName)
-
-                        // 截取片段并转WAV
-                        wavConverter.extractClip(
-                            pcmFile = pcmFile,
-                            outputWav = clipFile,
-                            startSecond = clipStart,
-                            durationSecond = clipTotalDuration
-                        )
-
-                        // 波形JSON序列化
-                        val jsonArr = JSONArray()
-                        audioEvent.waveform.forEach { jsonArr.put(it) }
-                        val waveJson = jsonArr.toString()
-
-                        eventEntities.add(
-                            AudioEventEntity(
-                                sleepRecordId = 0,
-                                startSecond = audioEvent.startSecond,
-                                endSecond = audioEvent.endSecond,
-                                maxVolume = audioEvent.maxVolume,
-                                peakTime = audioEvent.peakTime,
-                                type = audioEvent.type,
-                                waveformJson = waveJson,
-                                clipPath = clipFile.absolutePath
-                            )
-                        )
-                    } catch (e: Exception) {
-                        // 单个片段截取失败：跳过当前片段，不阻断整体流程
-                        e.printStackTrace()
-                    }
-                }
 
                 val record = SleepRecord(
-                    startTime = startTime,
-                    endTime = endTime,
+                    startTime = startTs,
+                    endTime = endTs,
                     duration = durationSecTotal.toLong(),
                     quality = when {
                         durationSecTotal >= 6 * 3600 -> "Good"
                         durationSecTotal >= 3 * 3600 -> "Normal"
                         else -> "Poor"
                     },
-                    audioPath = "", // 不保存完整录音路径
-                    fileSize = fileSize,
+                    audioPath = "",
+                    fileSize = 0,
                     sampleRate = sampleRate,
                     sleepScore = sleepScore,
                     noiseEventCount = noiseCount,
-                    avgVolume = avgVol,
-                    maxWholeVolume = maxVolWhole
+                    avgVolume = avgVolume,
+                    maxWholeVolume = maxWholeVolume
                 )
 
-                val insertSuccess = repo.insertFullSleepRecord(record, eventEntities)
-                if (insertSuccess) {
-                    // 入库成功后删除原始大PCM，仅保留小片段
-                    pcmFile.takeIf { it.exists() }?.delete()
+                val ok = repo.insertFullSleepRecord(record, eventEntities)
+                Log.d("StreamAnalyze", "流式入库 ok=$ok score=$sleepScore")
+                if (ok) {
+                    //入库成功才删除原始pcm
+                    pcmFilePath?.let { path ->
+                        val f = File(path)
+                        if (f.exists()) f.delete()
+                    }
+                    loadRecords()
+                } else {
+                    Log.w("StreamAnalyze", "数据库插入失败，保留pcm文件")
                 }
-                loadRecords()
-            } catch (globalEx: Exception) {
-                // 顶层兜底：哪怕整体解析全部异常，也要创建一条空事件记录，不丢失整夜睡眠基础记录
-                globalEx.printStackTrace()
-                val record = SleepRecord(
-                    startTime = startTime,
-                    endTime = endTime,
-                    duration = durationSecTotal.toLong(),
-                    quality = "Poor",
-                    audioPath = "",
-                    fileSize = File(pcmPath).length(),
-                    sampleRate = 0,
-                    sleepScore = 50,
-                    noiseEventCount = 0,
-                    avgVolume = 0.0,
-                    maxWholeVolume = 0.0
-                )
-                repo.insertFullSleepRecord(record, emptyList())
-                File(pcmPath).takeIf { it.exists() }?.delete()
-                loadRecords()
+
+            } catch (e: Exception) {
+                Log.e("StreamAnalyze", "流式入库异常", e)
             }
         }
     }
@@ -288,11 +196,11 @@ class SleepViewModel(application: Application) : AndroidViewModel(application) {
 
     // 启动/停止录音服务：停止时优先更新UI，再通知后台
     fun toggleRecording() = if (!_isRecording.value) {
-        val intent = Intent(appContext, SleepRecordService::class.java).apply {
+        val intent = android.content.Intent(appContext, SleepRecordService::class.java).apply {
             action = SleepRecordService.ACTION_START
             putExtra(SleepRecordService.EXTRA_RECORD_QUALITY, _currentRecordQuality.value.name)
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) appContext.startForegroundService(intent)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) appContext.startForegroundService(intent)
         else appContext.startService(intent)
 
         _isRecording.value = true
@@ -310,7 +218,7 @@ class SleepViewModel(application: Application) : AndroidViewModel(application) {
         _isRecording.value = false
         _elapsedSeconds.value = 0L
 
-        val stopIntent = Intent(appContext, SleepRecordService::class.java).apply {
+        val stopIntent = android.content.Intent(appContext, SleepRecordService::class.java).apply {
             action = SleepRecordService.ACTION_STOP
         }
         appContext.startService(stopIntent)
@@ -394,32 +302,14 @@ class SleepViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // 音频播放控制
-    fun playCurrentRecord() {
-        val fullRecord = _currentFullRecord.value ?: return
-        val path = fullRecord.record.audioPath ?: return
-        if (path.isBlank()) return
-
-        if (_isPlaying.value) {
-            audioPlayer.stop()
-            _isPlaying.value = false
-            _currentPlayingSegmentStartSec.value = null
-            return
-        }
-        _currentPlayingSegmentStartSec.value = null
-        audioPlayer.play(path) {
-            _isPlaying.value = false
-            _currentPlayingSegmentStartSec.value = null
-        }
-        _isPlaying.value = true
-    }
-
+    // 停止播放（片段播放共用）
     fun stopPlaying() {
         audioPlayer.stop()
         _isPlaying.value = false
         _currentPlayingSegmentStartSec.value = null
     }
 
+    // 播放单个声响事件片段（方案A：双参数 clipPath + startSecond）
     fun playAudioSegment(clipPath: String, startSecond: Double) {
         if (clipPath.isBlank()) return
         val clipFile = File(clipPath)
@@ -440,12 +330,17 @@ class SleepViewModel(application: Application) : AndroidViewModel(application) {
         _currentPlayingSegmentStartSec.value = startSecond
         _isPlaying.value = true
 
-        audioPlayer.play(clipPath) {
-            // 回调里增加校验：只有和当前播放项一致，才清空状态，避免旧回调干扰
-            if (_currentPlayingSegmentStartSec.value == startSecond) {
-                _isPlaying.value = false
-                _currentPlayingSegmentStartSec.value = null
+        try {
+            audioPlayer.play(clipPath) {
+                // 回调里增加校验：只有和当前播放项一致，才清空状态，避免旧回调干扰
+                if (_currentPlayingSegmentStartSec.value == startSecond) {
+                    _isPlaying.value = false
+                    _currentPlayingSegmentStartSec.value = null
+                }
             }
+        } catch (ex: Exception) {
+            Log.e("PlaySegment", "播放片段发生异常", ex)
+            stopPlaying()
         }
     }
 }

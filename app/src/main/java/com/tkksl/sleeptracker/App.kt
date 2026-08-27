@@ -5,42 +5,49 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.os.Bundle
+import com.tkksl.sleeptracker.data.audio.SleepRecordService
 import com.tkksl.sleeptracker.viewmodel.SleepViewModel
 import com.tkksl.sleeptracker.viewmodel.SleepViewModelFactory
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 
 class App : Application() {
     lateinit var globalVm: SleepViewModel
-    private val appScope = CoroutineScope(Dispatchers.Default)
 
-    private val recordFinishReceiver = object : BroadcastReceiver() {
+    private val streamAnalysisReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            // 统一判空，避免空指针
-            if (intent == null) return
+            intent ?: return
+            if (intent.action != SleepRecordService.ACTION_STREAM_ANALYSIS_RESULT) return
 
-            val audioPath = intent.getStringExtra("audioPath") ?: return
-            val pcmPath = intent.getStringExtra("pcmPath") ?: return
-            val startTime = intent.getLongExtra("startTime", 0L)
-            val endTime = intent.getLongExtra("endTime", 0L)
+            val startTs = intent.getLongExtra(SleepRecordService.EXTRA_RECORD_START, 0L)
+            val endTs = intent.getLongExtra(SleepRecordService.EXTRA_RECORD_END, 0L)
+            val sampleRate = intent.getIntExtra(SleepRecordService.EXTRA_SAMPLE_RATE,44100)
+            val totalNoiseDuration = intent.getDoubleExtra(SleepRecordService.EXTRA_TOTAL_NOISE_DURATION,0.0)
+            val avgVolume = intent.getDoubleExtra(SleepRecordService.EXTRA_AVG_VOLUME,0.0)
+            val maxWholeVolume = intent.getDoubleExtra(SleepRecordService.EXTRA_MAX_WHOLE_VOLUME,0.0)
+            val pcmFilePath = intent.getStringExtra(SleepRecordService.EXTRA_PCM_FILE_PATH)
 
-            // 时间戳有效性校验，过滤异常数据
-            if (startTime <= 0 || endTime <= startTime) return
+            val eventBundleList = intent.getParcelableArrayListExtra<Bundle>("eventListBundle") ?: return
 
-            // 核心修复：耗时分析切到后台线程，避免阻塞主线程引发ANR
-            appScope.launch {
-                globalVm.handleRecordFinish(audioPath, pcmPath, startTime, endTime)
-            }
+            if (startTs <= 0 || endTs <=0) return
+            globalVm.handleStreamAnalysisResult(
+                startTs = startTs,
+                endTs = endTs,
+                sampleRate = sampleRate,
+                totalNoiseDuration = totalNoiseDuration,
+                avgVolume = avgVolume,
+                maxWholeVolume = maxWholeVolume,
+                eventBundleList = eventBundleList,
+                pcmFilePath = pcmFilePath
+            )
         }
     }
 
     override fun onCreate() {
         super.onCreate()
-        // 全局唯一ViewModel实例，全应用共用
         globalVm = SleepViewModelFactory(this).create(SleepViewModel::class.java)
-        // 注册录音完成广播
-        val filter = IntentFilter("SLEEP_RECORD_FINISHED")
-        registerReceiver(recordFinishReceiver, filter, Context.RECEIVER_EXPORTED)
+
+        val streamFilter = IntentFilter(SleepRecordService.ACTION_STREAM_ANALYSIS_RESULT)
+        // 注意：Application注册广播无法安全unregister，属于架构风险；生产建议迁移到Activity/ViewModel注册
+        registerReceiver(streamAnalysisReceiver, streamFilter, Context.RECEIVER_EXPORTED)
     }
 }

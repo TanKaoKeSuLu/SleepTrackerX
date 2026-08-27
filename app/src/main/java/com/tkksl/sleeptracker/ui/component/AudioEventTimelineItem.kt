@@ -28,8 +28,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.tkksl.sleeptracker.data.analyzer.AudioEvent
 import com.tkksl.sleeptracker.data.analyzer.getShowName
-import com.tkksl.sleeptracker.data.analyzer.peakDecibel
 import com.tkksl.sleeptracker.utils.TimeFormatUtil
+import com.tkksl.sleeptracker.utils.volumeToHumanLevel
 import kotlin.math.roundToInt
 
 private fun getRealTimeText(recordStartTime: Long, relativeSec: Double): String {
@@ -65,6 +65,16 @@ fun AudioEventTimelineItem(
     } else {
         null
     }
+
+    // ===== 新增：时长文本分支判断 =====
+    val durationText = if (event.duration < 1) {
+        "${(event.duration * 1000).roundToInt()}ms"
+    } else {
+        "持续 ${event.duration.roundToInt()} 秒"
+    }
+
+    // 转换为用户友好的0‑100声响等级
+    val showLevel = volumeToHumanLevel(event.maxVolume)
 
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -124,7 +134,7 @@ fun AudioEventTimelineItem(
                             tint = if (canPlay) mainTextColor else mainTextColor.copy(alpha = 0.35f)
                         )
                     }
-                    Text(text = "持续 ${event.duration.roundToInt()} 秒", color = mainTextColor)
+                    Text(text = durationText, color = mainTextColor)
                 }
 
                 Row(
@@ -132,7 +142,7 @@ fun AudioEventTimelineItem(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(text = "声响类型：${event.type.getShowName()}", color = mainTextColor)
-                    Text(text = "峰值：${event.peakDecibel} dB", color = hintTextColor)
+                    Text(text = "声响强度：${showLevel} / 100", color = hintTextColor)
                 }
             }
         }
